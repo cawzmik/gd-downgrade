@@ -107,7 +107,7 @@ try {
     Say "GD Downgrade: rolls Geometry Dash back to 2.2081 so Geode mods work again" Cyan
     Say ""
     Say "Found GD in: $gd"
-    Say "Your save gets backed up to your Desktop first."
+    Say "Your save gets backed up first (to your user folder)."
     Say ""
     Read-Host "Press Enter to start" | Out-Null
 
@@ -119,12 +119,32 @@ try {
     Wait-GDClosed
 
     $save = Join-Path $env:LOCALAPPDATA "GeometryDash"
-    if (Test-Path $save) {
-        $backup = Join-Path ([Environment]::GetFolderPath("Desktop")) ("GD save backup " + (Get-Date -Format "yyyy-MM-dd HH-mm"))
-        Say "1/4  Backing up your save to: $backup"
-        Copy-Item -Path $save -Destination $backup -Recurse -Force
+    $files = @()
+    if (Test-Path $save) { $files = @(Get-ChildItem -Path $save -File -Filter "*.dat") }
+    if ($files.Count -gt 0) {
+        $name = "GD save backup " + (Get-Date -Format "yyyy-MM-dd HH-mm")
+        $backup = $null
+        foreach ($root in @($env:USERPROFILE, $PSScriptRoot, $env:TEMP)) {
+            if (-not $root) { continue }
+            $dest = Join-Path $root $name
+            try {
+                New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                foreach ($f in $files) { Copy-Item -Path $f.FullName -Destination $dest -Force }
+                $backup = $dest
+                break
+            } catch {
+                Remove-Item -Path $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+        if ($backup) {
+            Say "1/4  Backed up your save to: $backup"
+        } else {
+            Say "1/4  Couldn't back up your save anywhere." Yellow
+            $go = Read-Host "Type yes to keep going without a backup, or just press Enter to stop"
+            if ($go.Trim().ToLower() -ne "yes") { Done 1 }
+        }
     } else {
-        Say "1/4  No save folder found, skipping the backup" Yellow
+        Say "1/4  No save files found, skipping the backup" Yellow
     }
 
     $depot = Join-Path $steam "steamapps\content\app_$AppId\depot_$DepotId"
